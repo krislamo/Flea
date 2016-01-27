@@ -14,6 +14,8 @@
 #   You should have received a copy of the GNU Affero General Public License
 #   along with this program.  If not, see <http://www.gnu.org/licenses/>
 
+import re
+
 def cfgParser(cfgFile):
 
     # Dictionary to hold final data
@@ -62,7 +64,7 @@ def cfgParser(cfgFile):
 
                                 # Remove the first character
                                 part = part[points[0]+1:]
-                                # Calcuate end of str for length change
+                                # Calculate end of str for length change
                                 points[1] -= 1
 
                             else:
@@ -85,7 +87,7 @@ def cfgParser(cfgFile):
                         else:
                             break
 
-                    # Calcuate where this part goes in settings
+                    # Calculate where this part goes in settings
                     if counter == 0:
                         counter += 1
                         settings[part] = None
@@ -96,6 +98,20 @@ def cfgParser(cfgFile):
                     elif counter == 1:
                         counter -= 1
                         settings[pieces[0]] = part
+
+    # Convert text to appropriate types in the settings[] dictionary
+    # e.g. "6667" to int("6667"); "true" to bool("true"), etc.
+    for x in settings:
+
+        # Conversion for booleans
+        if settings[x].lower() == "true":
+            settings[x] = True
+        elif settings[x].lower() == "false":
+            settings[x] == False
+
+        # Conversion for positive integers
+        elif re.search("^[0-9]+$", settings[x]) != None:
+            settings[x] = int(settings[x])
 
     return settings
 
