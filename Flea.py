@@ -17,8 +17,7 @@
 import traceback
 
 try:
-    from core.main import *
-    main()
+    import core.main
 except:
     traceback.print_exc()
     input()
