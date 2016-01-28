@@ -12,6 +12,9 @@ continuing.
 Flea was written in [Python 2.7](http://www.python.org/download/releases/2.7/)
 
 ## Quick Start
-1. Run the terminal/console in the root of the project and type: 
+1. Edit the *settings.conf* file to appropriate settings on the server you would
+like to use
+ 
+2. Run the terminal/console in the root of the project and type: 
 *python Flea.py*
 
