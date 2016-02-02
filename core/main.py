@@ -18,11 +18,82 @@ from core.config import *
 import core.irclib as irclib
 
 # Built-in to Python 2.7
+import __builtin__
 import socket
 import ssl
+import sys
+import os
+
+
+# Allows reimporting modules
+class ImportRollback:
+    def __init__(self):
+        # Dictionary of loaded modules
+        self.curMods = sys.modules.copy()
+        self.newImport = __builtin__.__import__
+
+        # Directory of plugins
+        self.plugins = os.getcwd()+"/plugins/"
+
+        # Add the plugins location to the path variable
+        # Helps the system find the plugin modules
+        sys.path.append(self.plugins)
+
+        # Override builtin import function with install()
+        __builtin__.__import__ = self.install
+        self.newMods = {}
+
+    # Import modules
+    def install(self, mod, globals=None, locals=None, fromlist=[]):
+        self.newMods[mod] = 1
+        return apply(self.newImport, (mod, globals, locals, fromlist))
+
+    # Delete modules
+    def reset(self):
+        for mod in self.newMods.keys():
+            if not self.curMods.has_key(mod):
+                del(sys.modules[mod])
+
+        __builtin__.__import__ = self.newImport
+
+
+def PluginsImport():
+    # Get root of Flea
+    current = os.getcwd()
+    # Path to /plugins/ under /Flea/
+    plugins = current+"/plugins/"
+
+    # If /plugins/ exists change directory to it
+    if os.path.exists(plugins):
+        os.chdir(plugins)
+
+        # Go through every item in /plugins/
+        for item in os.listdir(plugins):
+
+            # Only import directory plugins (no single files)
+            if os.path.isdir(plugins+item):
+                print "[Plugins] Initializing "+item
+                __import__(item+".main")
+
+    else:
+        return False
+
+    os.chdir(current)
+    return True
+
 
 def main():
+
+    # Parse main settings.conf file
     config = cfgParser("settings.conf")
+
+    # Keep track of modules for a rollback
+    importctrl = ImportRollback()
+
+    # Import /plugins/
+    if config["plugins"]:
+        if not PluginsImport():
+            print "[Plugins] Failed to load."
 
     # Create irclib irc object
     irc = irclib.irc()
@@ -64,7 +135,7 @@ def main():
 
             if len(tmpdata) < 4096:
                 break
-        
+
         # If no incoming data exists then connection has closed
         if len(tmpdata) == 0:
             input("Connection closed.")
@@ -82,7 +153,7 @@ def main():
                 # Print line, parse it and respond
                 print line
                 pack = irc.Parser(line)
-    
+
                 # Ping Pong, keep the connection alive.
                 if pack["cmd"] == "PING":
                     irc.Pong(pack["text"])
@@ -91,12 +162,14 @@ def main():
                 elif pack["cmd"] == "001":
                     irc.Mode(config["nick"], config["mode"])
 
-                # Send password after End of MOTD
-                elif pack["cmd"] == "376":
-                    irc.Identify(config["password"])
-                    # Temp test join
-                    irc.Join("#Flea")
-    
+                elif pack["cmd"] == "NOTICE":
+                    if pack["ident"] == "NickServ":
+                        # Send password after NickServ informs you
+                        # that your nick is registered
+                        pattern = r"[Tt]his nickname is registered"
+                        if re.search(pattern, pack["text"]):
+                            irc.Identify(config["password"])
+                            irc.Join("#Flea")
+
 
 main()
-

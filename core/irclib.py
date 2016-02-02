@@ -20,12 +20,12 @@ class irc:
     debug = False
     sock = socket.socket()
 
-    # IRC Parser. Parses by line 
+    # IRC Parser. Parses by line
     def Parser(self, line):
         packet = {"nick":None, "ident":None,
               "host":None, "cmd":None,
               "params":[], "text":None}
-    
+
         if len(line) > 0:
             if(line[0] == ':'):
                 part, line = line.split(' ', 1)
@@ -92,8 +92,11 @@ class irc:
     def Mode(self, nick, mode):
         self.msg("MODE "+ nick + " "+mode)
 
+    def PrivMsg(self, user, message):
+        self.msg("PRIVMSG "+user+" :"+message)
+
     def Identify(self, password):
-        self.msg("NickServ IDENTIFY "+password)
+        self.PrivMsg("NickServ", "IDENTIFY "+password)
 
     def Join(self, channel):
         self.msg("JOIN "+channel)
@@ -103,9 +106,6 @@ class irc:
 
     def Notice(self, message, user):
         self.msg("NOTICE "+user+" :"+message)
-
-    def PrivMsg(self, user, message):
-        self.msg("PRIVMSG "+user+" :"+message)
 
     def Part(self, channel, message):
         self.msg("PART "+channel+" "+message)

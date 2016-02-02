@@ -107,7 +107,7 @@ def cfgParser(cfgFile):
         if settings[x].lower() == "true":
             settings[x] = True
         elif settings[x].lower() == "false":
-            settings[x] == False
+            settings[x] = False
 
         # Conversion for positive integers
         elif re.search("^[0-9]+$", settings[x]) != None:
