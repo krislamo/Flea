@@ -23,6 +23,7 @@ import socket
 import ssl
 import sys
 import os
+import re
 
 
 # Allows reimporting modules
@@ -63,6 +64,9 @@ def PluginsImport():
     # Path to /plugins/ under /Flea/
     plugins = current+"/plugins/"
 
+    # List of plugins
+    plugin_list = []
+
     # If /plugins/ exists change directory to it
     if os.path.exists(plugins):
         os.chdir(plugins)
@@ -73,33 +77,36 @@ def PluginsImport():
             # Only import directory plugins (no single files)
             if os.path.isdir(plugins+item):
                 print "[Plugins] Initializing "+item
-                __import__(item+".main")
+                plugin = __import__(item+".main")
+                plugin_list.append(plugin)
 
     else:
         return False
 
     os.chdir(current)
-    return True
+    return plugin_list
+
 
 
 def main():
 
+    # Create irclib irc object
+    irc = irclib.irc()
+
     # Parse main settings.conf file
-    config = cfgParser("settings.conf")
+    irc.config = cfgParser("settings.conf")
 
     # Keep track of modules for a rollback
     importctrl = ImportRollback()
 
     # Import /plugins/
-    if config["plugins"]:
-        if not PluginsImport():
+    if irc.config["plugins"]:
+        plugins = PluginsImport()
+        if not plugins:
             print "[Plugins] Failed to load."
 
-    # Create irclib irc object
-    irc = irclib.irc()
-
     # Set debug to true/false inside irc() object
-    irc.debug = config["debug"]
+    irc.debug = irc.config["debug"]
 
     # Create socket object
     irc.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -108,8 +115,8 @@ def main():
     irc.sock = ssl.wrap_socket(irc.sock)
 
     # Connect to IRC server
-    irc.sock.connect((config["host"], config["port"]))
-    print "Connecting to "+config["host"]+':'+str(config["port"])
+    irc.sock.connect((irc.config["host"], irc.config["port"]))
+    print "Connecting to "+irc.config["host"]+':'+str(irc.config["port"])
 
     # Display SSL information to the user
     ssl_info = irc.sock.cipher()
@@ -119,10 +126,10 @@ def main():
         print "[SSL] Bits: "+str(ssl_info[2])
 
     # Send User/Nick message to establish user on the server
-    irc.User(config["ident"], config["mode"],
-            config["unused"], config["realname"])
+    irc.User(irc.config["ident"], irc.config["mode"],
+            irc.config["unused"], irc.config["realname"])
 
-    irc.Nick(config["nick"])
+    irc.Nick(irc.config["nick"])
 
     while True:
         # Buffer to store data from server
@@ -152,24 +159,29 @@ def main():
 
                 # Print line, parse it and respond
                 print line
-                pack = irc.Parser(line)
+                irc.pack = irc.Parser(line)
+
+                # Run all plugins main() function
+                if irc.config["plugins"]:
+                    for plugin in plugins:
+                        plugin.main.main(irc)
 
                 # Ping Pong, keep the connection alive.
-                if pack["cmd"] == "PING":
-                    irc.Pong(pack["text"])
+                if irc.pack["cmd"] == "PING":
+                    irc.Pong(irc.pack["text"])
 
                 # Send user mode message after command 001
-                elif pack["cmd"] == "001":
-                    irc.Mode(config["nick"], config["mode"])
+                elif irc.pack["cmd"] == "001":
+                    irc.Mode(irc.config["nick"], irc.config["mode"])
 
-                elif pack["cmd"] == "NOTICE":
-                    if pack["ident"] == "NickServ":
+                elif irc.pack["cmd"] == "NOTICE":
+                    if irc.pack["ident"] == "NickServ":
                         # Send password after NickServ informs you
                         # that your nick is registered
                         pattern = r"[Tt]his nickname is registered"
-                        if re.search(pattern, pack["text"]):
-                            irc.Identify(config["password"])
-                            irc.Join("#Flea")
+                        if re.search(pattern, irc.pack["text"]):
+                            irc.Identify(irc.config["password"])
+                            irc.Join(irc.config["channel"])
 
 
 main()

@@ -14,10 +14,14 @@
 #   You should have received a copy of the GNU Affero General Public License
 #   along with this program.  If not, see <http://www.gnu.org/licenses/>
 
+# Built-in to Python 2.7
 import socket
 
 class irc:
     debug = False
+
+    config = {}
+    pack = {}
     sock = socket.socket()
 
     # IRC Parser. Parses by line
@@ -114,7 +118,7 @@ class irc:
         self.msg("NOTICE "+user+" :\001VERSION "+version+"\001")
 
     def Whois(self, query):
-        self.msg("WHOIS "+query+"\r\n")
+        self.msg("WHOIS "+query)
 
     def SetMode(self, channel, nick, mode):
         self.msg("MODE "+channel+" "+mode+" "+nick)
