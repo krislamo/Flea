@@ -16,10 +16,12 @@
 
 # Built-in to Python 2.7
 import socket
+import re
 
 class irc:
-    debug = False
 
+    debug = False
+    log = False
     config = {}
     pack = {}
     sock = socket.socket()
@@ -79,10 +81,22 @@ class irc:
             return packet
 
 
-    # Basic message function to send any data
+    # Basic message function to send and log any data
     def msg(self, message):
         self.sock.send(message+"\r\n")
-        if self.debug: print ">>> "+message
+
+        # Match messages containing private information
+        # then censors it to output to the terminal and log
+        pattern = r"^PRIVMSG NickServ :IDENTIFY *"
+        if re.search(pattern, message):
+            message = "PRIVMSG NickServ :IDENTIFY ****"
+
+        output = ">>> "+message
+
+        if self.debug:
+            print output
+        if self.log:
+            self.log.write(output+"\n")
 
     def User(self, nick, mode, unused, owner):
         self.msg("USER "+nick+' '+mode+' '+unused+" :"+owner)

@@ -1,3 +1,19 @@
+#   An IRC bot named Flea
+#   Copyright (C) 2016  Kris Lamoureux
+
+#   This program is free software: you can redistribute it and/or modify
+#   it under the terms of the GNU Affero General Public License as published by
+#   the Free Software Foundation, either version 3 of the License, or
+#   (at your option) any later version.
+
+#   This program is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU Affero General Public License for more details.
+
+#   You should have received a copy of the GNU Affero General Public License
+#   along with this program.  If not, see <http://www.gnu.org/licenses/>
+
 import re
 
 # Init
@@ -11,7 +27,7 @@ def chkcontrol(irc):
     global access
     global queue
 
-    nick = irc.pack["nick"]
+    nick = irc.pack["nick"].lower()
 
     for person in access:
         if nick == person:
@@ -33,13 +49,14 @@ def main(irc):
 
     # Set control channel
     controlchan = irc.config["channel"]
+    controlusr = irc.config["control"]
 
     # NOTICEs are used to "control" Flea
     if irc.pack["cmd"] == "NOTICE":
 
         # Nick must match the nick in settings
         # e.g. control = Kris
-        if irc.pack["nick"] == irc.config["control"]:
+        if irc.pack["nick"].lower() == controlusr.lower():
 
             # Split message by spaces, for functions with
             # required parameters. e.g. "<cmd> <param1> <param2>"
@@ -67,13 +84,10 @@ def main(irc):
                     if chkcontrol(irc):
                         irc.Notice("You already have access to Control.",
                                     irc.pack["nick"])
-                    else:
-                        noaccess(irc)
 
                 if irc.pack["text"] == "quit":
                     if chkcontrol(irc):
-                        irc.Quit("Fleabot https://github.com/Kris619/Flea")
-                        quit()
+                        return "QUIT"
                     else:
                         noaccess(irc)
 
@@ -81,32 +95,34 @@ def main(irc):
     elif irc.pack["cmd"] == "307":
         if irc.pack["text"] == "is identified for this nick":
 
+            usernick = irc.pack["params"][1]
+
             # Check if Nick is in the queue for access list
-            if queue.count(irc.pack["params"][1]) == 1:
+            if queue.count(usernick) == 1:
 
                 # Remove Nick from queue
-                queue.remove(irc.pack["params"][1])
+                queue.remove(usernick)
 
                 # Check if user is set to control in settings
                 # e.g. control = Kris
-                if irc.pack["params"][1] == irc.config["control"]:
+                if usernick.lower() == controlusr.lower():
 
 
                     # Is control user inside the control channel?
-                    if chans[controlchan].count(irc.pack["params"][1]) == 1:
+                    if chans[controlchan.lower()].count(usernick) == 1:
 
                         # Grant access
-                        access.append(irc.pack["params"][1])
+                        access.append(usernick)
 
-                        print irc.pack["params"][1]+" added to Access"
+                        print usernick+" added to Access"
 
                         irc.Notice(
                             "You have been given access to Control.",
-                            irc.pack["params"][1])
+                            usernick)
                 else:
                     irc.Notice(
                         "You are not in the Control channel: "+controlchan,
-                        irc.pack["params"][1])
+                        usernick)
 
     # Keep track of users in every channel
     # "353" lists users to a channel
@@ -137,7 +153,7 @@ def main(irc):
         if irc.pack["nick"] == irc.config["nick"]:
             # Create channel user list if it doesn't exist
             if chans.keys().count(irc.pack["text"]) == 0:
-                chans[irc.pack["text"]] = []
+                chans[irc.pack["text"].lower()] = [irc.pack["text"]]
 
         # Another user joined
         else:

@@ -15,10 +15,27 @@
 #   along with this program.  If not, see <http://www.gnu.org/licenses/>
 
 import traceback
+import sys
 
 try:
     import core.main
+
+except KeyboardInterrupt:
+    print "\nGoodbye!"
+    sys.exit()
+
+except SystemExit:
+    raise
+
 except:
+    # Print error, save it to error.txt
+    # then wait to be closed.
     traceback.print_exc()
-    input()
+
+    errorfile = open("error.txt", 'a')
+    traceback.print_exc(None, errorfile)
+    errorfile.close()
+
+    raw_input()
+    sys.exit(0)
 

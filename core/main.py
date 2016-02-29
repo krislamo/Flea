@@ -58,7 +58,14 @@ class ImportRollback:
         __builtin__.__import__ = self.newImport
 
 
-def PluginsImport():
+# Print and log to logfile
+def prntlog(message, logfile):
+    print message
+    if logfile:
+        logfile.write(message+"\n")
+
+
+def PluginsImport(log=False):
     # Get root of Flea
     current = os.getcwd()
     # Path to /plugins/ under /Flea/
@@ -76,7 +83,7 @@ def PluginsImport():
 
             # Only import directory plugins (no single files)
             if os.path.isdir(plugins+item):
-                print "[Plugins] Initializing "+item
+                prntlog("[Plugins] Initializing "+item, log)
                 plugin = __import__(item+".main")
                 plugin_list.append(plugin)
 
@@ -87,7 +94,6 @@ def PluginsImport():
     return plugin_list
 
 
-
 def main():
 
     # Create irclib irc object
@@ -96,14 +102,22 @@ def main():
     # Parse main settings.conf file
     irc.config = cfgParser("settings.conf")
 
+    # If logging is enabled, open log file.
+    if irc.config["logging"]:
+        log = open("log.txt", 'a')
+        irc.log = log
+    else:
+        log = False
+
     # Keep track of modules for a rollback
     importctrl = ImportRollback()
 
     # Import /plugins/
     if irc.config["plugins"]:
-        plugins = PluginsImport()
+        plugins = PluginsImport(log)
+
         if not plugins:
-            print "[Plugins] Failed to load."
+            prntlog("[Plugins] Failed to load.", log)
 
     # Set debug to true/false inside irc() object
     irc.debug = irc.config["debug"]
@@ -115,15 +129,18 @@ def main():
     irc.sock = ssl.wrap_socket(irc.sock)
 
     # Connect to IRC server
-    irc.sock.connect((irc.config["host"], irc.config["port"]))
-    print "Connecting to "+irc.config["host"]+':'+str(irc.config["port"])
+    host = irc.config["host"]
+    port = irc.config["port"]
+
+    irc.sock.connect((host, port))
+    prntlog("Connecting to "+host+':'+str(port), log)
 
     # Display SSL information to the user
     ssl_info = irc.sock.cipher()
     if ssl_info != None:
-        print "[SSL] Cipher: "+ssl_info[0]
-        print "[SSL] Version: "+ssl_info[1]
-        print "[SSL] Bits: "+str(ssl_info[2])
+        prntlog("[SSL] Cipher: "+ssl_info[0], log)
+        prntlog("[SSL] Version: "+ssl_info[1], log)
+        prntlog("[SSL] Bits: "+str(ssl_info[2]), log)
 
     # Send User/Nick message to establish user on the server
     irc.User(irc.config["ident"], irc.config["mode"],
@@ -145,8 +162,9 @@ def main():
 
         # If no incoming data exists then connection has closed
         if len(tmpdata) == 0:
-            input("Connection closed.")
-            sys.exit()
+            print "Connection closed."
+            raw_input()
+            sys.exit(0)
 
         # Split data to easily deal with it
         data = tmpdata.split("\r\n")
@@ -157,14 +175,17 @@ def main():
             # Ignore empty lines
             if len(line) > 0:
 
-                # Print line, parse it and respond
-                print line
+                # Print/log line, parse it and respond
+                prntlog(line, log)
                 irc.pack = irc.Parser(line)
 
                 # Run all plugins main() function
+                wait = ''
                 if irc.config["plugins"]:
                     for plugin in plugins:
-                        plugin.main.main(irc)
+                        wait = plugin.main.main(irc)
+                        if wait == "QUIT":
+                            break
 
                 # Ping Pong, keep the connection alive.
                 if irc.pack["cmd"] == "PING":
@@ -182,6 +203,19 @@ def main():
                         if re.search(pattern, irc.pack["text"]):
                             irc.Identify(irc.config["password"])
                             irc.Join(irc.config["channel"])
+
+        if log: log.flush()
+
+        # Wait for QUIT to be returned from any plugin's main() function
+        if wait == "QUIT":
+            # Quit, close connection and logfile.
+            irc.Quit("Fleabot https://github.com/Kris619/Flea")
+            irc.sock.close()
+            if log: log.close()
+
+            print "Press the [ENTER] key to close."
+            raw_input()
+            sys.exit(0)
 
 
 main()
