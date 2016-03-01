@@ -19,14 +19,14 @@ import socket
 import re
 
 class irc:
-
+    # TODO: Wrap in __init__
     debug = False
     log = False
     config = {}
     pack = {}
     sock = socket.socket()
 
-    # IRC Parser. Parses by line
+    # IRC Parser. Parses by line Functions are lowercase, classes uppercase
     def Parser(self, line):
         packet = {"nick":None, "ident":None,
               "host":None, "cmd":None,

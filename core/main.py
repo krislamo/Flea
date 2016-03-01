@@ -28,16 +28,14 @@ import re
 
 # Allows reimporting modules
 class ImportRollback:
-    def __init__(self):
+    def __init__(self, plugins_folder="/plugins"):
         # Dictionary of loaded modules
         self.curMods = sys.modules.copy()
         self.newImport = __builtin__.__import__
 
-        # Directory of plugins
-        self.plugins = os.getcwd()+"/plugins/"
+        self.plugins = os.path.join(os.getcwd(), plugins_folder)
 
         # Add the plugins location to the path variable
-        # Helps the system find the plugin modules
         sys.path.append(self.plugins)
 
         # Override builtin import function with install()
@@ -59,94 +57,88 @@ class ImportRollback:
 
 
 # Print and log to logfile
-def prntlog(message, logfile):
+def printlog(message, log=None):
     print message
-    if logfile:
-        logfile.write(message+"\n")
+    if log is not None:
+        log.write(message+"\n")
 
 
-def PluginsImport(log=False):
-    # Get root of Flea
-    current = os.getcwd()
-    # Path to /plugins/ under /Flea/
-    plugins = current+"/plugins/"
-
-    # List of plugins
+def PluginsImport(log=None, plugins_folder="/plugins"):
+    plugins = os.path.join(os.getcwd(), plugins_folder)
     plugin_list = []
 
-    # If /plugins/ exists change directory to it
     if os.path.exists(plugins):
         os.chdir(plugins)
 
-        # Go through every item in /plugins/
         for item in os.listdir(plugins):
-
-            # Only import directory plugins (no single files)
-            if os.path.isdir(plugins+item):
-                prntlog("[Plugins] Initializing "+item, log)
+            if os.path.isdir(os.path.join(plugins, item)):
+                printlog("[Plugins] Initializing " + item, log)
                 plugin = __import__(item+".main")
                 plugin_list.append(plugin)
 
     else:
-        return False
+        return None
 
-    os.chdir(current)
+    os.chdir(os.getcwd())
     return plugin_list
 
 
-def main():
+def init_connection(config_file="settings.conf"):
+    irc_conn = irclib.irc()
+    irc_conn.config = cfgParser(config_file)
 
-    # Create irclib irc object
-    irc = irclib.irc()
-
-    # Parse main settings.conf file
-    irc.config = cfgParser("settings.conf")
-
-    # If logging is enabled, open log file.
-    if irc.config["logging"]:
+    if irc_conn.config["logging"]:
         log = open("log.txt", 'a')
-        irc.log = log
+        irc_conn.log = log
     else:
-        log = False
+        log = None
+
+    irc_conn.debug = irc_conn.config["debug"]
 
     # Keep track of modules for a rollback
     importctrl = ImportRollback()
 
-    # Import /plugins/
-    if irc.config["plugins"]:
+    # Import /plugins
+    if irc_conn.config["plugins"]:
         plugins = PluginsImport(log)
+    else:
+        plugins = None
 
-        if not plugins:
-            prntlog("[Plugins] Failed to load.", log)
+    if plugins is not None:
+        # TODO: Add more debugging messages, sporadatic.
+        printlog("[Plugins] Failed to load.", log)
 
-    # Set debug to true/false inside irc() object
-    irc.debug = irc.config["debug"]
+    # Create socket object and wrap with SSL object, then connect.
+    irc_conn.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    irc_conn.sock = ssl.wrap_socket(irc_conn.sock)
 
-    # Create socket object
-    irc.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server = (irc_conn.config["host"], irc_conn.config["port"])
+    try:
+        printlog("Connecting to " + server[0] + ':' + str(server[1]))
+        irc_conn.sock.connect(server[0], server[1])
+    except:
+        printlog("Connection failed.", log)
+        return (None, None)
 
-    # Wrap socket object to create SSLSocket object
-    irc.sock = ssl.wrap_socket(irc.sock)
+    # Display SSL inforation to the user
+    ssl_info = irc_conn.sock.cipher()
+    if ssl_info is not None:
+        printlog("[SSL] Cipher: " + ssl_info[0], log)
+        printlog("[SSL] Version: " + ssl_info[1], log)
+        printlog("[SSL] Bits: " + str(ssl_info[2]), log)
 
-    # Connect to IRC server
-    host = irc.config["host"]
-    port = irc.config["port"]
+    # Establish identity on server
+    identity = (irc_conn.config["ident"], irc_conn.config["mode"], irc_conn.config["unused"], irc_conn.config["realname"])
+    irc_conn.User(identity)
+    irc_conn.Nick(irc_conn.config["nick"])
 
-    irc.sock.connect((host, port))
-    prntlog("Connecting to "+host+':'+str(port), log)
+    return (irc_conn, plugins)
 
-    # Display SSL information to the user
-    ssl_info = irc.sock.cipher()
-    if ssl_info != None:
-        prntlog("[SSL] Cipher: "+ssl_info[0], log)
-        prntlog("[SSL] Version: "+ssl_info[1], log)
-        prntlog("[SSL] Bits: "+str(ssl_info[2]), log)
 
-    # Send User/Nick message to establish user on the server
-    irc.User(irc.config["ident"], irc.config["mode"],
-            irc.config["unused"], irc.config["realname"])
-
-    irc.Nick(irc.config["nick"])
+def client_loop(irc_conn, plugins, log=None):
+    if irc_conn is None:
+        print "No connection established."
+        sys.exit(0)
 
     while True:
         # Buffer to store data from server
@@ -154,7 +146,7 @@ def main():
 
         while True:
             # Receive data from connection
-            tmpdata = irc.sock.recv(4096)
+            tmpdata = irc_conn.sock.recv(4096)
             data = data + tmpdata
 
             if len(tmpdata) < 4096:
@@ -176,46 +168,50 @@ def main():
             if len(line) > 0:
 
                 # Print/log line, parse it and respond
-                prntlog(line, log)
-                irc.pack = irc.Parser(line)
+                printlog(line, log)
+                irc_conn.pack = irc_conn.Parser(line)
 
                 # Run all plugins main() function
                 wait = ''
-                if irc.config["plugins"]:
+                if irc_conn.config["plugins"]:
                     for plugin in plugins:
-                        wait = plugin.main.main(irc)
+                        wait = plugin.main.main(irc_conn)
                         if wait == "QUIT":
                             break
 
                 # Ping Pong, keep the connection alive.
-                if irc.pack["cmd"] == "PING":
-                    irc.Pong(irc.pack["text"])
+                if irc_conn.pack["cmd"] == "PING":
+                    irc_conn.Pong(irc_conn.pack["text"])
 
                 # Send user mode message after command 001
-                elif irc.pack["cmd"] == "001":
-                    irc.Mode(irc.config["nick"], irc.config["mode"])
+                elif irc_conn.pack["cmd"] == "001":
+                    irc_conn.Mode(irc_conn.config["nick"], irc_conn.config["mode"])
 
-                elif irc.pack["cmd"] == "NOTICE":
-                    if irc.pack["ident"] == "NickServ":
+                elif irc_conn.pack["cmd"] == "NOTICE":
+                    if irc_conn.pack["ident"] == "NickServ":
                         # Send password after NickServ informs you
                         # that your nick is registered
                         pattern = r"[Tt]his nickname is registered"
-                        if re.search(pattern, irc.pack["text"]):
-                            irc.Identify(irc.config["password"])
-                            irc.Join(irc.config["channel"])
+                        if re.search(pattern, irc_conn.pack["text"]):
+                            irc_conn.Identify(irc_conn.config["password"])
+                            irc_conn.Join(irc_conn.config["channel"])
 
-        if log: log.flush()
+        if log:
+            log.flush()
 
         # Wait for QUIT to be returned from any plugin's main() function
         if wait == "QUIT":
             # Quit, close connection and logfile.
-            irc.Quit("Fleabot https://github.com/Kris619/Flea")
-            irc.sock.close()
-            if log: log.close()
+            irc_conn.Quit("Fleabot https://github.com/Kris619/Flea")
+            irc_conn.sock.close()
+            if log:
+                log.close()
 
             print "Press the [ENTER] key to close."
             raw_input()
             sys.exit(0)
 
 
-main()
+def main():
+    (irc_conn, plugins) = init_connection()
+    client_loop(irc_conn, plugins)

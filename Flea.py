@@ -18,7 +18,7 @@ import traceback
 import sys
 
 try:
-    import core.main
+    from core.main import *
 
 except KeyboardInterrupt:
     print "\nGoodbye!"
@@ -39,3 +39,4 @@ except:
     raw_input()
     sys.exit(0)
 
+main()
