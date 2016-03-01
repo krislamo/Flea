@@ -1,3 +1,4 @@
+#!/bin/python
 #   An IRC bot named Flea
 #   Copyright (C) 2016  Kris Lamoureux
 
@@ -18,7 +19,7 @@ import traceback
 import sys
 
 try:
-    import core.main
+    import Flea.Flea
 
 except KeyboardInterrupt:
     print "\nGoodbye!"
@@ -39,3 +40,4 @@ except:
     raw_input()
     sys.exit(0)
 
+Flea.Flea.main()
