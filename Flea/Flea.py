@@ -14,8 +14,8 @@
 #   You should have received a copy of the GNU Affero General Public License
 #   along with this program.  If not, see <http://www.gnu.org/licenses/>
 
-from core.config import *
-import core.irclib as irclib
+import config
+import irclib
 
 # Built-in to Python 2.7
 import __builtin__
@@ -85,7 +85,7 @@ def PluginsImport(log=None, plugins_folder="/plugins"):
 
 def init_connection(config_file="settings.conf"):
     irc_conn = irclib.irc()
-    irc_conn.config = cfgParser(config_file)
+    irc_conn.config = config.cfgParser(config_file)
 
     if irc_conn.config["logging"]:
         log = open("log.txt", 'a')
@@ -115,7 +115,7 @@ def init_connection(config_file="settings.conf"):
     server = (irc_conn.config["host"], irc_conn.config["port"])
     try:
         printlog("Connecting to " + server[0] + ':' + str(server[1]))
-        irc_conn.sock.connect(server[0], server[1])
+        irc_conn.sock.connect(server)
     except:
         printlog("Connection failed.", log)
         return (None, None)
@@ -128,14 +128,16 @@ def init_connection(config_file="settings.conf"):
         printlog("[SSL] Bits: " + str(ssl_info[2]), log)
 
     # Establish identity on server
-    identity = (irc_conn.config["ident"], irc_conn.config["mode"], irc_conn.config["unused"], irc_conn.config["realname"])
-    irc_conn.User(identity)
+    identity = (irc_conn.config["ident"], irc_conn.config["mode"],
+                irc_conn.config["unused"], irc_conn.config["realname"])
+    irc_conn.User(*identity)
     irc_conn.Nick(irc_conn.config["nick"])
 
     return (irc_conn, plugins)
 
 
 def client_loop(irc_conn, plugins, log=None):
+    wait = None
     if irc_conn is None:
         print "No connection established."
         sys.exit(0)
@@ -166,18 +168,17 @@ def client_loop(irc_conn, plugins, log=None):
 
             # Ignore empty lines
             if len(line) > 0:
-
-                # Print/log line, parse it and respond
                 printlog(line, log)
                 irc_conn.pack = irc_conn.Parser(line)
 
                 # Run all plugins main() function
-                wait = ''
+                wait = None
                 if irc_conn.config["plugins"]:
-                    for plugin in plugins:
-                        wait = plugin.main.main(irc_conn)
-                        if wait == "QUIT":
-                            break
+                    if plugins is not None:
+                        for plugin in plugins:
+                            wait = plugin.main.main(irc_conn)
+                            if wait == "QUIT":
+                                break
 
                 # Ping Pong, keep the connection alive.
                 if irc_conn.pack["cmd"] == "PING":
@@ -215,3 +216,6 @@ def client_loop(irc_conn, plugins, log=None):
 def main():
     (irc_conn, plugins) = init_connection()
     client_loop(irc_conn, plugins)
+
+if __name__ == "__main__":
+    main()

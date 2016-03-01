@@ -21,12 +21,13 @@ import re
 class irc:
     # TODO: Wrap in __init__
     debug = False
-    log = False
+    log = None
     config = {}
     pack = {}
     sock = socket.socket()
 
-    # IRC Parser. Parses by line Functions are lowercase, classes uppercase
+    # IRC Parser. Parses by line Functions are
+    # lowercase, classes uppercase
     def Parser(self, line):
         packet = {"nick":None, "ident":None,
               "host":None, "cmd":None,
@@ -95,7 +96,7 @@ class irc:
 
         if self.debug:
             print output
-        if self.log:
+        if self.log is not None:
             self.log.write(output+"\n")
 
     def User(self, nick, mode, unused, owner):
